@@ -1,6 +1,6 @@
 import pandas as pd
 import pytest
-from src.feature_engineering import generate_user_features
+from feature_engineering import generate_user_features
 
 # Sample synthetic data to test
 @pytest.fixture
