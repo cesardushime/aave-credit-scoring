@@ -3,16 +3,12 @@ from dash import dcc, html, Input, Output, State
 import plotly.express as px
 import pandas as pd
 
-# Load dataset
+# Load dataset exactly as you had it
 data_path = 'C:\\Users\\Cesar Dushimimana\\Documents\\aave-credit-scoring\\data\\aave_cleaned_transactions.csv'
 df = pd.read_csv(data_path, parse_dates=['timestamp'])
-df['date'] = pd.to_datetime(df['timestamp']).dt.date
+df['date'] = df['timestamp'].dt.date
 
-# Initialize app
-app = dash.Dash(__name__)
-app.title = 'Assets & Transactions Time Series Dashboard'
-
-# Styles for light/dark themes
+# Themes
 LIGHT_THEME = {
     'background': '#ffffff',
     'text': '#000000',
@@ -24,13 +20,16 @@ DARK_THEME = {
     'table_header': '#444444'
 }
 
-# Layout
+# Initialize app WITH suppress_callback_exceptions=True to avoid the callback error on dynamic IDs
+app = dash.Dash(__name__, suppress_callback_exceptions=True)
+app.title = 'Assets & Transactions Time Series Dashboard'
+
+# Layout with tabs and main container
 app.layout = html.Div([
-    html.H1("Assets USD Volume Over Time", style={'textAlign': 'center', 'marginBottom': 30}),
+    html.H1("Assets & Transactions Dashboard", style={'textAlign': 'center', 'marginBottom': 30}),
 
     # Dark mode toggle
     html.Div([
-        html.Label("Toggle Dark Mode:", style={'marginRight': '10px'}),
         dcc.Checklist(
             id='dark-mode-toggle',
             options=[{'label': 'Dark Mode', 'value': 'dark'}],
@@ -39,64 +38,107 @@ app.layout = html.Div([
         )
     ], style={'textAlign': 'center', 'marginBottom': 20}),
 
-    html.Div([
-        html.Div([
-            html.Label("Select Timeframe:", style={'fontWeight': 'bold'}),
-            dcc.Dropdown(
-                id='timeframe-dropdown',
-                options=[
-                    {'label': 'Daily', 'value': 'D'},
-                    {'label': 'Weekly', 'value': 'W'},
-                    {'label': 'Monthly', 'value': 'M'}
-                ],
-                value='D',
-                clearable=False,
-                style={'width': '100%'}
-            ),
-        ], style={'width': '30%', 'display': 'inline-block', 'verticalAlign': 'top', 'paddingRight': 20}),
+    # Tabs
+    dcc.Tabs(id='tabs', value='tab-assets', children=[
+        dcc.Tab(label='Assets Time Series', value='tab-assets'),
+        dcc.Tab(label='Total Volume by Action', value='tab-volume'),
+    ]),
 
-        html.Div([
-            html.Label("Select Asset(s):", style={'fontWeight': 'bold'}),
-            dcc.Dropdown(
-                id='asset-dropdown',
-                options=[{'label': asset, 'value': asset} for asset in sorted(df['asset_symbol'].dropna().unique())],
-                value=[],
-                multi=True,
-                placeholder="Select one or more assets (default top 5)",
-                style={'width': '100%'}
-            ),
-        ], style={'width': '65%', 'display': 'inline-block', 'verticalAlign': 'top'})
-    ], style={'marginBottom': 30, 'maxWidth': 900, 'margin': 'auto'}),
+    # Tab content container
+    html.Div(id='tab-content', style={'marginTop': 30}),
 
-    # Total volume summary
-    html.Div(id='total-volume-summary', style={'textAlign': 'center', 'fontSize': 18, 'marginBottom': 15}),
+], id='main-container', style={'fontFamily': 'Arial, sans-serif', 'padding': '20px', 'minHeight': '100vh'})
 
-    dcc.Graph(id='time-series-chart', style={'height': '600px', 'maxWidth': 1000, 'margin': 'auto'}),
+# Helper function to get theme dict
+def get_theme(dark_mode_values):
+    return DARK_THEME if 'dark' in dark_mode_values else LIGHT_THEME
 
-    # Data table
-    html.Div(id='data-table-container', style={'maxWidth': 1000, 'margin': '30px auto'}),
+# Callback to render the tabs content
+@app.callback(
+    Output('tab-content', 'children'),
+    Output('main-container', 'style'),
+    Input('tabs', 'value'),
+    Input('dark-mode-toggle', 'value'),
+)
+def render_tab_content(selected_tab, dark_mode_values):
+    theme = get_theme(dark_mode_values)
+    style = {
+        'backgroundColor': theme['background'],
+        'color': theme['text'],
+        'fontFamily': 'Arial, sans-serif',
+        'minHeight': '100vh',
+        'padding': '20px'
+    }
 
-    # Download button
-    html.Div([
-        html.Button("Download Filtered Data as CSV", id='download-button', n_clicks=0,
-                    style={'padding': '10px 20px', 'fontSize': 16, 'cursor': 'pointer'}),
-        dcc.Download(id='download-dataframe-csv')
-    ], style={'textAlign': 'center', 'marginBottom': 40})
-], id='main-container', style={'fontFamily': 'Arial, sans-serif', 'padding': '20px', 'backgroundColor': LIGHT_THEME['background'], 'color': LIGHT_THEME['text']})
+    if selected_tab == 'tab-assets':
+        # Layout for the Assets Time Series tab
+        layout = html.Div([
+            html.Div([
+                html.Div([
+                    html.Label("Select Timeframe:", style={'fontWeight': 'bold'}),
+                    dcc.Dropdown(
+                        id='timeframe-dropdown',
+                        options=[
+                            {'label': 'Daily', 'value': 'D'},
+                            {'label': 'Weekly', 'value': 'W'},
+                            {'label': 'Monthly', 'value': 'M'}
+                        ],
+                        value='D',
+                        clearable=False,
+                        style={'width': '100%'}
+                    )
+                ], style={'width': '30%', 'display': 'inline-block', 'verticalAlign': 'top', 'paddingRight': 20}),
+
+                html.Div([
+                    html.Label("Select Asset(s):", style={'fontWeight': 'bold'}),
+                    dcc.Dropdown(
+                        id='asset-dropdown',
+                        options=[{'label': asset, 'value': asset} for asset in sorted(df['asset_symbol'].dropna().unique())],
+                        value=[],
+                        multi=True,
+                        placeholder="Select one or more assets (default top 5)",
+                        style={'width': '100%'}
+                    ),
+                ], style={'width': '65%', 'display': 'inline-block', 'verticalAlign': 'top'}),
+            ], style={'marginBottom': 30, 'maxWidth': 900, 'margin': 'auto'}),
+
+            html.Div(id='total-volume-summary', style={'textAlign': 'center', 'fontSize': 18, 'marginBottom': 15}),
+
+            dcc.Graph(id='time-series-chart', style={'height': '600px', 'maxWidth': 1000, 'margin': 'auto'}),
+
+            html.Div(id='data-table-container', style={'maxHeight': '400px', 'overflowY': 'auto', 'marginTop': 30, 'maxWidth': 1000, 'margin': 'auto'}),
+
+            html.Div([
+                html.Button("Download Filtered Data as CSV", id='download-button', n_clicks=0,
+                            style={'padding': '10px 20px', 'fontSize': 16, 'cursor': 'pointer'}),
+                dcc.Download(id='download-dataframe-csv')
+            ], style={'textAlign': 'center', 'marginTop': 40}),
+        ])
+
+    elif selected_tab == 'tab-volume':
+        # Layout for the Total Volume by Action tab
+        layout = html.Div([
+            dcc.Graph(id='volume-by-action-type')
+        ])
+
+    else:
+        layout = html.Div("Tab not found")
+
+    return layout, style
 
 
+# Callback to update the time series chart, total volume and data table on tab-assets
 @app.callback(
     Output('time-series-chart', 'figure'),
     Output('total-volume-summary', 'children'),
     Output('data-table-container', 'children'),
-    Output('main-container', 'style'),
     Input('timeframe-dropdown', 'value'),
     Input('asset-dropdown', 'value'),
     Input('dark-mode-toggle', 'value')
 )
-def update_outputs(timeframe, selected_assets, dark_mode_values):
+def update_time_series(timeframe, selected_assets, dark_mode_values):
+    theme = get_theme(dark_mode_values)
     is_dark_mode = 'dark' in dark_mode_values
-    theme = DARK_THEME if is_dark_mode else LIGHT_THEME
 
     dff = df.copy()
     if not selected_assets:
@@ -104,28 +146,17 @@ def update_outputs(timeframe, selected_assets, dark_mode_values):
         selected_assets = top_assets
     dff = dff[dff['asset_symbol'].isin(selected_assets)]
 
-    # Resample
     dff.set_index('timestamp', inplace=True)
-    dff_resampled = (
-        dff.groupby('asset_symbol')
-        .resample(timeframe)['amount_usd']
-        .sum()
-        .reset_index()
-    )
+    dff_resampled = dff.groupby('asset_symbol').resample(timeframe)['amount_usd'].sum().reset_index()
 
-    # Plotly line chart
     fig = px.line(
         dff_resampled,
         x='timestamp',
         y='amount_usd',
         color='asset_symbol',
-        labels={
-            'timestamp': 'Date',
-            'amount_usd': 'USD Volume',
-            'asset_symbol': 'Asset'
-        },
+        labels={'timestamp': 'Date', 'amount_usd': 'USD Volume', 'asset_symbol': 'Asset'},
         title='USD Volume Over Time by Asset',
-        template='plotly_white' if not is_dark_mode else 'plotly_dark'
+        template='plotly_dark' if is_dark_mode else 'plotly_white'
     )
 
     fig.update_layout(
@@ -133,12 +164,12 @@ def update_outputs(timeframe, selected_assets, dark_mode_values):
         legend_title_text='Assets',
         xaxis=dict(
             rangeselector=dict(
-                buttons=list([
+                buttons=[
                     dict(count=1, label='1m', step='month', stepmode='backward'),
                     dict(count=3, label='3m', step='month', stepmode='backward'),
                     dict(count=6, label='6m', step='month', stepmode='backward'),
                     dict(step='all')
-                ])
+                ]
             ),
             rangeslider=dict(visible=True),
             type='date',
@@ -148,11 +179,10 @@ def update_outputs(timeframe, selected_assets, dark_mode_values):
         margin=dict(l=40, r=40, t=80, b=40)
     )
 
-    # Total USD Volume summary text
     total_volume = dff_resampled['amount_usd'].sum()
     total_volume_text = f"Total USD Volume for selected assets & timeframe: ${total_volume:,.2f}"
 
-    # Data table (basic HTML table)
+    # Data table (basic HTML)
     table_header_style = {
         'backgroundColor': theme['table_header'],
         'color': theme['text'],
@@ -165,11 +195,9 @@ def update_outputs(timeframe, selected_assets, dark_mode_values):
         'color': theme['text']
     }
 
-    # Create a dataframe for the table with nice formatting
     dff_resampled_sorted = dff_resampled.sort_values(['asset_symbol', 'timestamp'])
     dff_resampled_sorted['timestamp'] = dff_resampled_sorted['timestamp'].dt.strftime('%Y-%m-%d')
 
-    # Generate table rows
     table_rows = []
     for _, row in dff_resampled_sorted.iterrows():
         table_rows.append(html.Tr([
@@ -189,18 +217,38 @@ def update_outputs(timeframe, selected_assets, dark_mode_values):
 
     container = html.Div(table, style={'overflowX': 'auto', 'maxHeight': '400px', 'overflowY': 'auto'})
 
-    # Main container style for dark/light mode
-    main_style = {
-        'fontFamily': 'Arial, sans-serif',
-        'padding': '20px',
-        'backgroundColor': theme['background'],
-        'color': theme['text'],
-        'minHeight': '100vh'
-    }
+    return fig, total_volume_text, container
 
-    return fig, total_volume_text, container, main_style
+# Callback for volume by action type bar chart on tab-volume
+@app.callback(
+    Output('volume-by-action-type', 'figure'),
+    Input('dark-mode-toggle', 'value')
+)
+def update_volume_by_action(dark_mode_values):
+    theme = get_theme(dark_mode_values)
+    is_dark_mode = 'dark' in dark_mode_values
 
+    action_volume = df.groupby('action_type')['amount_usd'].sum().sort_values(ascending=False).reset_index()
 
+    fig = px.bar(
+        action_volume,
+        x='action_type',
+        y='amount_usd',
+        text='amount_usd',
+        labels={'action_type': 'Action Type', 'amount_usd': 'Total USD Volume'},
+        title='Total USD Volume by Action Type',
+        template='plotly_dark' if is_dark_mode else 'plotly_white'
+    )
+
+    fig.update_traces(texttemplate='%{text:,.0f}', textposition='outside')
+    fig.update_layout(
+        yaxis_title='USD Volume',
+        xaxis_title='Action Type',
+        margin=dict(l=40, r=40, t=80, b=40)
+    )
+    return fig
+
+# Callback to download filtered data CSV from tab-assets filters
 @app.callback(
     Output('download-dataframe-csv', 'data'),
     Input('download-button', 'n_clicks'),
@@ -216,16 +264,10 @@ def download_filtered_data(n_clicks, timeframe, selected_assets):
     dff = dff[dff['asset_symbol'].isin(selected_assets)]
 
     dff.set_index('timestamp', inplace=True)
-    dff_resampled = (
-        dff.groupby('asset_symbol')
-        .resample(timeframe)['amount_usd']
-        .sum()
-        .reset_index()
-    )
+    dff_resampled = dff.groupby('asset_symbol').resample(timeframe)['amount_usd'].sum().reset_index()
     dff_resampled['timestamp'] = dff_resampled['timestamp'].dt.strftime('%Y-%m-%d')
 
     return dcc.send_data_frame(dff_resampled.to_csv, "filtered_asset_data.csv", index=False)
-
 
 if __name__ == '__main__':
     app.run(debug=True)
